@@ -1,0 +1,23 @@
+name: smartbins
+description: Smart waste management app
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^6.2.1
+  http: ^1.2.0
+  shared_preferences: ^2.2.2
+  provider: ^6.1.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/smart_bin.png
+    - assets/images/map_bg.png
+    - assets/images/dark_bin.png
+    - assets/images/satellite_map.png
