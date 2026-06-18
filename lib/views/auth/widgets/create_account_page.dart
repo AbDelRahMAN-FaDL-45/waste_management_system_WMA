@@ -148,11 +148,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
   }
 
   Future<void> _createAccount() async {
-    // Validate form
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
+    if (!_formKey.currentState!.validate()) return;
     if (!_acceptTerms) {
       _showError('Please accept the Terms of Protocol');
       return;
@@ -160,7 +156,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    final success = await authProvider.register(
+    final success = await authProvider.registerAndLogin(
       firstName: _firstNameController.text.trim(),
       lastName: _lastNameController.text.trim(),
       email: _emailController.text.trim(),
@@ -170,22 +166,10 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
     );
 
     if (success && mounted) {
-      _showSuccess('Account created successfully!');
-
-      // Auto login after register using EMAIL
-      final loginSuccess = await authProvider.signIn(
-        userName: _emailController.text.trim(),
-        password: _passwordController.text,
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomePage()),
+            (route) => false,
       );
-
-      if (loginSuccess && mounted) {
-        _showSuccess('Welcome to SmartBins!');
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomePage()),
-        );
-      } else if (mounted) {
-        _showError(authProvider.error ?? 'Auto-login failed. Please log in manually.');
-      }
     } else if (mounted) {
       _showError(authProvider.error ?? 'Registration failed. Please try again.');
     }

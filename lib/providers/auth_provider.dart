@@ -5,8 +5,9 @@ import '../models/auth_models.dart';
 import '../models/user_models.dart';
 
 class AuthProvider extends ChangeNotifier {
-  final ApiService _apiService = ApiService();
-  bool _isLoading = false;
+  final ApiService _api = ApiService();
+
+  bool _isLoading = true;
   String? _error;
   bool _isAuthenticated = false;
   User? _currentUser;
@@ -17,61 +18,47 @@ class AuthProvider extends ChangeNotifier {
   User? get currentUser => _currentUser;
 
   AuthProvider() {
-    _checkAuth();
+    _init();
   }
 
-  Future<void> _checkAuth() async {
-    await _apiService.loadTokens();
-    _isAuthenticated = _apiService.isAuthenticated;
+  Future<void> _init() async {
+    await _api.loadTokens();
+    _isAuthenticated = _api.isAuthenticated;
     if (_isAuthenticated) {
-      await getCurrentUser();
+      _currentUser = await _api.getCurrentUser();
     }
+    _isLoading = false;
     notifyListeners();
   }
 
-  String _extractErrorMessage(dynamic error) {
-    String errorMsg = error.toString();
-
-    if (errorMsg.contains('{')) {
+  String _parseError(dynamic e) {
+    String s = e.toString();
+    final idx = s.indexOf('{');
+    if (idx >= 0) {
       try {
-        final jsonStart = errorMsg.indexOf('{');
-        final jsonStr = errorMsg.substring(jsonStart);
-        final errorData = jsonDecode(jsonStr);
-
-        // Handle case where message is a Map (like validation errors)
-        final message = errorData['message'];
-        if (message is String) {
-          return message;
-        } else if (message is Map) {
-          // Flatten validation errors
-          return message.entries.map((e) => '${e.key}: ${e.value}').join('\n');
+        final data = jsonDecode(s.substring(idx)) as Map;
+        final msg = data['message'] ?? data['Message'];
+        if (msg is String && msg.isNotEmpty) return msg;
+        final errors = data['errors'];
+        if (errors is Map) {
+          final parts = <String>[];
+          errors.forEach((k, v) {
+            if (v is List && v.isNotEmpty) parts.add(v.first.toString());
+            else if (v is String) parts.add(v);
+          });
+          if (parts.isNotEmpty) return parts.join(' ');
         }
-
-        final msg = errorData['Message'];
-        if (msg is String) return msg;
-        if (msg is Map) {
-          return msg.entries.map((e) => '${e.key}: ${e.value}').join('\n');
-        }
-
-        return errorData.toString();
-      } catch (_) {
-        errorMsg = errorMsg.replaceAll('Exception: ', '');
-        errorMsg = errorMsg.replaceAll('Registration failed: ', '');
-        errorMsg = errorMsg.replaceAll('Sign in failed: ', '');
-        errorMsg = errorMsg.replaceAll('Edit user failed: ', '');
-        errorMsg = errorMsg.replaceAll('Change password failed: ', '');
-      }
+      } catch (_) {}
     }
-
-    return errorMsg;
+    return s
+        .replaceAll('Exception: ', '')
+        .replaceAll('Registration failed: ', '')
+        .replaceAll('Sign in failed: ', '')
+        .replaceAll('Edit user failed: ', '')
+        .replaceAll('Change password failed: ', '');
   }
 
-  Future<void> getCurrentUser() async {
-    _currentUser = await _apiService.getCurrentUser();
-    notifyListeners();
-  }
-
-  Future<bool> register({
+  Future<bool> registerAndLogin({
     required String firstName,
     required String lastName,
     required String email,
@@ -82,22 +69,25 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
-
     try {
-      final request = RegisterRequest(
+      await _api.register(RegisterRequest(
         firstName: firstName,
         lastName: lastName,
         email: email,
         password: password,
         phoneNumber: phoneNumber,
         nationalId: nationalId,
-      );
-      await _apiService.register(request);
+      ));
+      if (!_api.isAuthenticated) {
+        await _api.signIn(SignInRequest(userName: email, password: password));
+      }
+      _currentUser = await _api.getCurrentUser();
+      _isAuthenticated = true;
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      _error = _extractErrorMessage(e);
+      _error = _parseError(e);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -111,76 +101,24 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
-
     try {
-      final request = SignInRequest(
-        userName: userName,
-        password: password,
-      );
-      final response = await _apiService.signIn(request);
+      await _api.signIn(SignInRequest(userName: userName, password: password));
+      _currentUser = await _api.getCurrentUser();
       _isAuthenticated = true;
-      await getCurrentUser();
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      _error = _extractErrorMessage(e);
+      _error = _parseError(e);
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
 
-  Future<bool> logout() async {
-    _isLoading = true;
+  Future<void> getCurrentUser() async {
+    _currentUser = await _api.getCurrentUser();
     notifyListeners();
-
-    try {
-      await _apiService.logout();
-      _isAuthenticated = false;
-      _currentUser = null;
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = _extractErrorMessage(e);
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<bool> createUser({
-    required String firstName,
-    required String lastName,
-    required String email,
-    required String phoneNumber,
-    required String password,
-    required String roleName,
-  }) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      final request = CreateUserRequest(
-        firstName: firstName,
-        lastName: lastName,
-        email: email,
-        phoneNumber: phoneNumber,
-        password: password,
-        roleName: roleName,
-      );
-      await _apiService.createUser(request);
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = _extractErrorMessage(e);
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
   }
 
   Future<bool> editUser({
@@ -193,22 +131,20 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
-
     try {
-      final request = EditUserRequest(
+      await _api.editUser(EditUserRequest(
         id: id,
         firstName: firstName,
         lastName: lastName,
         email: email,
         phoneNumber: phoneNumber,
-      );
-      await _apiService.editUser(request);
-      await getCurrentUser();
+      ));
+      _currentUser = await _api.getCurrentUser();
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      _error = _extractErrorMessage(e);
+      _error = _parseError(e);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -224,34 +160,48 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
-
     if (newPassword != confirmPassword) {
-      _error = 'New password and confirmation do not match';
+      _error = 'Passwords do not match';
       _isLoading = false;
       notifyListeners();
       return false;
     }
-
     if (newPassword.length < 6) {
       _error = 'Password must be at least 6 characters';
       _isLoading = false;
       notifyListeners();
       return false;
     }
-
     try {
-      final request = ChangePasswordRequest(
+      await _api.changePassword(ChangePasswordRequest(
         id: id,
         currentPassword: currentPassword,
         newPassword: newPassword,
         confirmPassword: confirmPassword,
-      );
-      await _apiService.changePassword(request);
+      ));
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      _error = _extractErrorMessage(e);
+      _error = _parseError(e);
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> logout() async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _api.logout();
+      _isAuthenticated = false;
+      _currentUser = null;
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = _parseError(e);
       _isLoading = false;
       notifyListeners();
       return false;

@@ -6,12 +6,10 @@ import 'package:smartbins/views/settings/settings_page.dart';
 
 class AppBottomNav extends StatelessWidget {
   final int currentIndex;
-
   const AppBottomNav({super.key, required this.currentIndex});
 
-  void _navigateTo(BuildContext context, int index) {
+  void _go(BuildContext context, int index) {
     if (index == currentIndex) return;
-
     Widget page;
     switch (index) {
       case 0: page = const HomePage(); break;
@@ -19,7 +17,6 @@ class AppBottomNav extends StatelessWidget {
       case 2: page = const SettingsPage(); break;
       default: return;
     }
-
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => page),
           (route) => false,
@@ -28,12 +25,11 @@ class AppBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = [
-      _NavItem(icon: Icons.grid_view_rounded, label: 'HOME'),
-      _NavItem(icon: Icons.map_outlined, label: 'MAP'),
-      _NavItem(icon: Icons.settings_outlined, label: 'SETTINGS'),
+    const items = [
+      (Icons.grid_view_rounded, 'HOME'),
+      (Icons.map_outlined, 'MAP'),
+      (Icons.settings_outlined, 'SETTINGS'),
     ];
-
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
@@ -44,22 +40,24 @@ class AppBottomNav extends StatelessWidget {
         top: false,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: List.generate(items.length, (index) {
-            final isActive = index == currentIndex;
+          children: List.generate(items.length, (i) {
+            final active = i == currentIndex;
             return GestureDetector(
-              onTap: () => _navigateTo(context, index),
+              onTap: () => _go(context, i),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(items[index].icon,
-                      color: isActive ? AppColors.primaryGreen : AppColors.gray,
+                  Icon(items[i].$1,
+                      color: active ? AppColors.primaryGreen : AppColors.gray,
                       size: 24),
                   const SizedBox(height: 4),
-                  Text(items[index].label,
+                  Text(items[i].$2,
                       style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: isActive ? AppColors.primaryGreen : AppColors.gray,
+                          color: active
+                              ? AppColors.primaryGreen
+                              : AppColors.gray,
                           letterSpacing: 0.5)),
                 ],
               ),
@@ -69,10 +67,4 @@ class AppBottomNav extends StatelessWidget {
       ),
     );
   }
-}
-
-class _NavItem {
-  final IconData icon;
-  final String label;
-  _NavItem({required this.icon, required this.label});
 }

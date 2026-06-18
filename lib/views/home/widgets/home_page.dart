@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:smartbins/core/app_colors.dart';
-import 'package:smartbins/views/home/widgets/bottom_nav_bar.dart';
 import 'package:smartbins/views/home/widgets/route_delta_card.dart';
 import 'package:smartbins/views/home/widgets/search_bar.dart';
 import 'package:smartbins/views/home/widgets/stats_row.dart';
 import 'package:smartbins/views/home/widgets/system_health_card.dart';
 import 'package:smartbins/views/map/widgets/map_page.dart';
-import 'package:smartbins/views/reports/alerts_page.dart';
-import 'package:smartbins/views/settings/settings_page.dart';
 import 'package:smartbins/widgets/app_bottom_nav.dart';
 import 'package:smartbins/widgets/custom_button.dart';
 import 'package:smartbins/widgets/smartbins_logo.dart';
@@ -20,8 +17,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _currentNavIndex = 0;
-
   void _goToMap() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const MapPage()),
