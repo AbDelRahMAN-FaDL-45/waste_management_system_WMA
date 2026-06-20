@@ -1,44 +1,47 @@
-// lib/models/user_models.dart
-
 class User {
-  final String id;
-  final String firstName;
-  final String lastName;
-  final String email;
-  final String phoneNumber;
+  final String? id;
+  final String? firstName;
+  final String? lastName;
+  final String? email;
+  final String? phoneNumber;
   final String? nationalId;
-  final String? roleName;
+  final String? role;
+  final bool? isActive;
 
   User({
-    required this.id,
-    required this.firstName,
-    required this.lastName,
-    required this.email,
-    required this.phoneNumber,
+    this.id,
+    this.firstName,
+    this.lastName,
+    this.email,
+    this.phoneNumber,
     this.nationalId,
-    this.roleName,
+    this.role,
+    this.isActive,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
-      id: json['id']?.toString() ?? '',
-      firstName: json['firstName']?.toString() ?? '',
-      lastName: json['lastName']?.toString() ?? '',
-      email: json['email']?.toString() ?? '',
-      phoneNumber: json['phoneNumber']?.toString() ?? '',
-      // Backend may return this as "nationalId" or "nationalID"
-      nationalId: (json['nationalId'] ?? json['nationalID'])?.toString(),
-      roleName: json['roleName']?.toString(),
+      id: json['id']?.toString() ?? json['Id']?.toString(),
+      firstName: json['firstName'] ?? json['FirstName'],
+      lastName: json['lastName'] ?? json['LastName'],
+      email: json['email'] ?? json['Email'],
+      phoneNumber: json['phoneNumber'] ?? json['PhoneNumber'],
+      nationalId: json['nationalId'] ?? json['NationalId'],
+      role: json['role'] ?? json['Role'],
+      isActive: json['isActive'] ?? json['IsActive'],
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'firstName': firstName,
-    'lastName': lastName,
-    'email': email,
-    'phoneNumber': phoneNumber,
-    if (nationalId != null) 'nationalId': nationalId,
-    if (roleName != null) 'roleName': roleName,
-  };
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'firstName': firstName,
+      'lastName': lastName,
+      'email': email,
+      'phoneNumber': phoneNumber,
+      'nationalId': nationalId,
+      'role': role,
+      'isActive': isActive,
+    };
+  }
 }

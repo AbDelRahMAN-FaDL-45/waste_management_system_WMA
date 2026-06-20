@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../core/services/api_service.dart';
 import '../models/auth_models.dart';
@@ -7,57 +6,37 @@ import '../models/user_models.dart';
 class AuthProvider extends ChangeNotifier {
   final ApiService _api = ApiService();
 
-  bool _isLoading = true;
-  String? _error;
   bool _isAuthenticated = false;
+  bool _isLoading = false;
+  String? _error;
   User? _currentUser;
 
+  bool get isAuthenticated => _isAuthenticated;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  bool get isAuthenticated => _isAuthenticated;
   User? get currentUser => _currentUser;
 
   AuthProvider() {
-    _init();
+    _loadTokens();
   }
 
-  Future<void> _init() async {
+  Future<void> _loadTokens() async {
     await _api.loadTokens();
     _isAuthenticated = _api.isAuthenticated;
     if (_isAuthenticated) {
       _currentUser = await _api.getCurrentUser();
     }
-    _isLoading = false;
     notifyListeners();
   }
 
-  String _parseError(dynamic e) {
-    String s = e.toString();
-    final idx = s.indexOf('{');
-    if (idx >= 0) {
-      try {
-        final data = jsonDecode(s.substring(idx)) as Map;
-        final msg = data['message'] ?? data['Message'];
-        if (msg is String && msg.isNotEmpty) return msg;
-        final errors = data['errors'];
-        if (errors is Map) {
-          final parts = <String>[];
-          errors.forEach((k, v) {
-            if (v is List && v.isNotEmpty) parts.add(v.first.toString());
-            else if (v is String) parts.add(v);
-          });
-          if (parts.isNotEmpty) return parts.join(' ');
-        }
-      } catch (_) {}
+  String? _parseError(dynamic e) {
+    if (e.toString().contains('Email') || e.toString().contains('email')) {
+      return 'This email is already registered';
     }
-    return s
-        .replaceAll('Exception: ', '')
-        .replaceAll('Registration failed: ', '')
-        .replaceAll('Sign in failed: ', '')
-        .replaceAll('Edit user failed: ', '')
-        .replaceAll('Change password failed: ', '');
+    return e.toString().replaceAll('Exception:', '').trim();
   }
 
+  // Register + Login
   Future<bool> registerAndLogin({
     required String firstName,
     required String lastName,
@@ -69,6 +48,7 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
+
     try {
       await _api.register(RegisterRequest(
         firstName: firstName,
@@ -78,10 +58,19 @@ class AuthProvider extends ChangeNotifier {
         phoneNumber: phoneNumber,
         nationalId: nationalId,
       ));
+
       if (!_api.isAuthenticated) {
         await _api.signIn(SignInRequest(userName: email, password: password));
       }
+
       _currentUser = await _api.getCurrentUser();
+
+      if (_currentUser == null) {
+        debugPrint('⚠️ Retrying user load...');
+        await Future.delayed(const Duration(milliseconds: 800));
+        _currentUser = await _api.getCurrentUser();
+      }
+
       _isAuthenticated = true;
       _isLoading = false;
       notifyListeners();
@@ -94,16 +83,21 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> signIn({
-    required String userName,
-    required String password,
-  }) async {
+  // Login Method (used by LoginPage)
+  Future<bool> signIn(String email, String password) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
+
     try {
-      await _api.signIn(SignInRequest(userName: userName, password: password));
+      await _api.signIn(SignInRequest(userName: email, password: password));
       _currentUser = await _api.getCurrentUser();
+
+      if (_currentUser == null) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        _currentUser = await _api.getCurrentUser();
+      }
+
       _isAuthenticated = true;
       _isLoading = false;
       notifyListeners();
@@ -116,92 +110,55 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> getCurrentUser() async {
-    _currentUser = await _api.getCurrentUser();
-    notifyListeners();
-  }
-
-  Future<bool> editUser({
-    required String id,
-    required String firstName,
-    required String lastName,
-    required String email,
-    required String phoneNumber,
-  }) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-    try {
-      await _api.editUser(EditUserRequest(
-        id: id,
-        firstName: firstName,
-        lastName: lastName,
-        email: email,
-        phoneNumber: phoneNumber,
-      ));
-      _currentUser = await _api.getCurrentUser();
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = _parseError(e);
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<bool> changePassword({
-    required String id,
-    required String currentPassword,
-    required String newPassword,
-    required String confirmPassword,
-  }) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-    if (newPassword != confirmPassword) {
-      _error = 'Passwords do not match';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-    if (newPassword.length < 6) {
-      _error = 'Password must be at least 6 characters';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-    try {
-      await _api.changePassword(ChangePasswordRequest(
-        id: id,
-        currentPassword: currentPassword,
-        newPassword: newPassword,
-        confirmPassword: confirmPassword,
-      ));
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = _parseError(e);
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
+  // Logout
   Future<bool> logout() async {
-    _isLoading = true;
-    notifyListeners();
     try {
       await _api.logout();
       _isAuthenticated = false;
       _currentUser = null;
+      _error = null;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Update Profile
+  Future<bool> updateProfile(EditUserRequest request) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _api.editUser(request);
+      _currentUser = await _api.getCurrentUser();
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      _error = _parseError(e);
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Change Password (used by ChangePasswordPage)
+  Future<bool> changePassword(ChangePasswordRequest request) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _api.changePassword(request);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
       _isLoading = false;
       notifyListeners();
       return false;

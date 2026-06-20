@@ -23,25 +23,41 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    // Re-fetch user in case it wasn't loaded yet
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       if (auth.currentUser == null && auth.isAuthenticated) {
-        auth.getCurrentUser();
+        _loadCurrentUser(auth);
       }
     });
   }
 
+  Future<void> _loadCurrentUser(AuthProvider auth) async {
+    try {
+      debugPrint('🔄 Loading current user in Settings...');
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Failed to load user in settings: $e');
+    }
+  }
+
   void _showError(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Row(children: [
-        const Icon(Icons.error_outline, color: Colors.white),
-        const SizedBox(width: 12),
-        Expanded(
-            child: Text(message,
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w600))),
-      ]),
+      content: Row(
+        children: [
+          const Icon(Icons.error_outline, color: Colors.white),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
       backgroundColor: Colors.red.shade700,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -50,8 +66,8 @@ class _SettingsPageState extends State<SettingsPage> {
     ));
   }
 
-  void _logout(BuildContext context) {
-    showDialog(
+  Future<void> _logout(BuildContext context) async {
+    final shouldLogout = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -60,28 +76,12 @@ class _SettingsPageState extends State<SettingsPage> {
         content: const Text('Are you sure you want to log out of SmartBins?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('CANCEL',
                 style: TextStyle(color: AppColors.gray)),
           ),
           ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final authProvider =
-              Provider.of<AuthProvider>(context, listen: false);
-              final success = await authProvider.logout();
-              if (context.mounted) {
-                if (success) {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
-                        (route) => false,
-                  );
-                } else {
-                  _showError(context,
-                      authProvider.error ?? 'Logout failed');
-                }
-              }
-            },
+            onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
@@ -93,145 +93,179 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     );
+
+    if (shouldLogout != true || !context.mounted) return;
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    try {
+      final success = await authProvider.logout();
+
+      if (context.mounted) {
+        if (success) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const LoginPage()),
+                (route) => false,
+          );
+        } else {
+          _showError(context, authProvider.error ?? 'Logout failed');
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        _showError(context, 'Logout failed. Please try again.');
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final user = authProvider.currentUser;
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, child) {
+        final user = authProvider.currentUser;
 
-    final displayName = user != null
-        ? '${user.firstName} ${user.lastName}'.toUpperCase()
-        : 'LOADING...';
-    final displayEmail = user?.email ?? '';
+        final displayName = user != null
+            ? '${user.firstName ?? ''} ${user.lastName ?? ''}'.trim()
+            : 'Loading...';
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            children: [
-              const SizedBox(height: 16),
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [SmartBinsLogo(), SizedBox(width: 40)],
-              ),
-              const SizedBox(height: 32),
+        final displayEmail = user?.email ?? 'No email available';
 
-              ProfileHeader(
-                name: displayName,
-                email: displayEmail,
-                showEditButton: true,
-                onEditProfile: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const EditProfilePage()),
-                  );
-                },
-              ),
-              const SizedBox(height: 32),
-
-              SettingsSection(
-                title: 'NOTIFICATION SETTINGS',
+        return Scaffold(
+          backgroundColor: Colors.white,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
                 children: [
-                  SettingsToggle(
-                    title: 'Push Notifications',
-                    subtitle: 'SYSTEM ALERTS & CRITICAL UPDATES',
-                    initialValue: true,
-                    onChanged: (value) {},
+                  const SizedBox(height: 16),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [SmartBinsLogo(), SizedBox(width: 40)],
                   ),
-                  const Divider(height: 1, indent: 20, endIndent: 20),
-                  SettingsToggle(
-                    title: 'Email Reports',
-                    subtitle: 'WEEKLY EFFICIENCY ANALYTICS',
-                    initialValue: false,
-                    onChanged: (value) {},
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
+                  const SizedBox(height: 32),
 
-              SettingsSection(
-                title: 'ACCOUNT SECURITY',
-                children: [
-                  SettingsNavItem(
-                    icon: Icons.lock_outline,
-                    title: 'Change Password',
-                    onTap: () {
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => const ChangePasswordPage()));
+                  ProfileHeader(
+                    name: displayName.toUpperCase(),
+                    email: displayEmail,
+                    showEditButton: true,
+                    onEditProfile: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const EditProfilePage(),
+                        ),
+                      );
                     },
                   ),
-                  SettingsNavItem(
-                    icon: Icons.shield_outlined,
-                    title: 'Two-Factor Authentication',
-                    subtitle: 'OFF',
-                    onTap: () {},
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
+                  const SizedBox(height: 32),
 
-              SettingsSection(
-                title: 'SUPPORT',
-                children: [
-                  SettingsNavItem(
-                    icon: Icons.help_outline,
-                    title: 'Help Center',
-                    subtitle: 'DOCUMENTATION & SUPPORT',
-                    onTap: () {},
+                  SettingsSection(
+                    title: 'NOTIFICATION SETTINGS',
+                    children: [
+                      SettingsToggle(
+                        title: 'Push Notifications',
+                        subtitle: 'SYSTEM ALERTS & CRITICAL UPDATES',
+                        initialValue: true,
+                        onChanged: (value) {},
+                      ),
+                      const Divider(height: 1, indent: 20, endIndent: 20),
+                      SettingsToggle(
+                        title: 'Email Reports',
+                        subtitle: 'WEEKLY EFFICIENCY ANALYTICS',
+                        initialValue: false,
+                        onChanged: (value) {},
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 32),
+                  const SizedBox(height: 24),
 
-              GestureDetector(
-                onTap: () => _logout(context),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.logout, color: Colors.red, size: 18),
-                    SizedBox(width: 8),
-                    Text(
-                      'LOG OUT OF SMARTBINS',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.red,
-                          letterSpacing: 0.5),
+                  SettingsSection(
+                    title: 'ACCOUNT SECURITY',
+                    children: [
+                      SettingsNavItem(
+                        icon: Icons.lock_outline,
+                        title: 'Change Password',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ChangePasswordPage(),
+                            ),
+                          );
+                        },
+                      ),
+                      SettingsNavItem(
+                        icon: Icons.shield_outlined,
+                        title: 'Two-Factor Authentication',
+                        subtitle: 'OFF',
+                        onTap: () {},
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  SettingsSection(
+                    title: 'SUPPORT',
+                    children: [
+                      SettingsNavItem(
+                        icon: Icons.help_outline,
+                        title: 'Help Center',
+                        subtitle: 'DOCUMENTATION & SUPPORT',
+                        onTap: () {},
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+
+                  GestureDetector(
+                    onTap: () => _logout(context),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.logout, color: Colors.red, size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          'LOG OUT OF SMARTBINS',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.red,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
+                  ),
+                  const SizedBox(height: 24),
 
-              Text(
-                'SYSTEM VERSION V2.4.0-STABLE',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.gray.withOpacity(0.5),
-                    height: 1.5,
-                    letterSpacing: 0.5),
+                  Text(
+                    'SYSTEM VERSION V2.4.0-STABLE',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.gray.withOpacity(0.5),
+                      height: 1.5,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  Text(
+                    'SEC. REF: 88-0412-7XX',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.gray.withOpacity(0.5),
+                      height: 1.5,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 100),
+                ],
               ),
-              Text(
-                'SEC. REF: 88-0412-7XX',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.gray.withOpacity(0.5),
-                    height: 1.5,
-                    letterSpacing: 0.5),
-              ),
-              const SizedBox(height: 100),
-            ],
+            ),
           ),
-        ),
-      ),
-      bottomNavigationBar: const AppBottomNav(currentIndex: 2),
+          bottomNavigationBar: const AppBottomNav(currentIndex: 2),
+        );
+      },
     );
   }
 }
